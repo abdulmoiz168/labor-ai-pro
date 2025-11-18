@@ -1,0 +1,8 @@
+{
+  "name": "Labor AI Pro",
+  "description": "An on-the-job AI partner for skilled workers. Use your camera and microphone to get real-time guidance on safety, tools, and procedures from the Labor AI Pro assistant.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
