@@ -27,11 +27,20 @@ const App: React.FC = () => {
         audio: true,
       });
       streamRef.current = stream;
+
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-      }
-      if (videoRef.current) {
-        await startSession(stream, videoRef);
+        try {
+          await startSession(stream, videoRef);
+        } catch (sessionError) {
+          // Session failed to start, clean up the media stream
+          stream.getTracks().forEach(track => track.stop());
+          streamRef.current = null;
+          if (videoRef.current) {
+            videoRef.current.srcObject = null;
+          }
+          throw sessionError;
+        }
       }
     } catch (err) {
       console.error("Error accessing media devices.", err);
