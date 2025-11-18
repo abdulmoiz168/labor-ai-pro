@@ -7,12 +7,19 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test:qdrant": "node test-scripts/run-all-tests.mjs"
+    "test:qdrant": "node test-scripts/run-all-tests.mjs",
+    "backend": "node backend/server.mjs",
+    "setup:collection": "node backend/setup-collection.mjs",
+    "dev:all": "concurrently \"npm run dev\" \"npm run backend\"",
+    "upload:pdf": "node scripts/upload-pdf.mjs"
   },
   "dependencies": {
     "@google/genai": "^1.29.1",
     "@qdrant/js-client-rest": "^1.16.0",
+    "cors": "^2.8.5",
     "dotenv": "^17.2.3",
+    "express": "^4.18.2",
+    "pdf-parse": "^1.1.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "uuid": "^13.0.0"
@@ -20,6 +27,7 @@
   "devDependencies": {
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "concurrently": "^8.2.2",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
   }

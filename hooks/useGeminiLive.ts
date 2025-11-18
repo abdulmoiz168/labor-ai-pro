@@ -1,11 +1,21 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { GoogleGenAI, LiveServerMessage, Modality, Session, type Blob } from '@google/genai';
+import { GoogleGenAI, LiveServerMessage, Modality, Session, type Blob, type GoogleGenAI as GoogleGenAIType } from '@google/genai';
 import { encode, decode, decodeAudioData } from '../utils/audio';
 import { blobToBase64 } from '../utils/image';
-import type { SessionState, TranscriptionItem } from '../types';
+import type { SessionState, TranscriptionItem, SearchResult } from '../types';
 
 const FRAME_RATE = 5; // Send 5 frames per second
 const JPEG_QUALITY = 0.7;
+
+// Get backend URL - in production use same origin, in dev use localhost:3001
+const getBackendURL = () => {
+  if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+    return 'http://localhost:3001';
+  }
+  return typeof window !== 'undefined' ? window.location.origin : '';
+};
+
+const BACKEND_URL = getBackendURL();
 
 // AudioWorklet processor code as a string
 const audioWorkletProcessor = `
@@ -49,6 +59,56 @@ export const useGeminiLive = () => {
 
   const currentInputTranscriptionRef = useRef('');
   const currentOutputTranscriptionRef = useRef('');
+  const genAIRef = useRef<GoogleGenAIType | null>(null);
+
+  /**
+   * Search documents using RAG
+   * Generates embedding for query and searches Qdrant
+   */
+  const searchDocuments = useCallback(async (query: string): Promise<SearchResult[]> => {
+    try {
+      console.log('[RAG] Searching for:', query);
+
+      // Generate embedding for the query
+      if (!genAIRef.current) {
+        throw new Error('GoogleGenAI not initialized');
+      }
+
+      const embeddingResult = await genAIRef.current.models.embedContent({
+        model: 'text-embedding-004',
+        contents: [query],
+      });
+      const queryVector = embeddingResult.embeddings[0].values;
+
+      console.log('[RAG] Generated query embedding, vector size:', queryVector.length);
+
+      // Search backend
+      const response = await fetch(`${BACKEND_URL}/api/search`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          query_vector: queryVector,
+          limit: 5,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Search failed: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('[RAG] Found', data.count, 'results');
+
+      return data.results || [];
+
+    } catch (error) {
+      console.error('[RAG] Search error:', error);
+      return [];
+    }
+  }, []);
 
   const cleanup = useCallback(() => {
     if (connectionTimeoutRef.current) {
@@ -111,18 +171,48 @@ export const useGeminiLive = () => {
     }, 30000);
 
     try {
+      // Check backend connection before starting
+      try {
+        const healthResponse = await fetch(`${BACKEND_URL}/api/health`);
+        if (!healthResponse.ok) {
+          console.warn('[RAG] Backend not available - document search will be disabled');
+        } else {
+          const healthData = await healthResponse.json();
+          console.log('[RAG] Backend connected:', healthData.message);
+        }
+      } catch (error) {
+        console.warn('[RAG] Backend connection check failed - document search will be disabled');
+      }
+
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      genAIRef.current = ai;
 
       const sessionPromise = ai.live.connect({
         model: 'gemini-2.5-flash-native-audio-preview-09-2025',
         config: {
-          systemInstruction: 'You are Labor AI Pro, an expert assistant for skilled trade professionals like electricians, plumbers, and construction workers. Provide clear, concise, and safety-conscious advice. When analyzing images or video, focus on tools, materials, safety equipment (PPE), and work procedures. Your tone should be professional, helpful, and direct.',
+          systemInstruction: 'You are Labor AI Pro, an expert assistant for skilled trade professionals like electricians, plumbers, and construction workers. Provide clear, concise, and safety-conscious advice. When analyzing images or video, focus on tools, materials, safety equipment (PPE), and work procedures. Your tone should be professional, helpful, and direct. When users ask questions about safety procedures, regulations, or technical documentation, use the search_documents function to retrieve relevant information from the uploaded manuals and guides.',
           responseModalities: [Modality.AUDIO],
           inputAudioTranscription: {},
           outputAudioTranscription: {},
           speechConfig: {
             voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } },
           },
+          tools: [{
+            functionDeclarations: [{
+              name: 'search_documents',
+              description: 'Search safety manuals, technical documentation, and procedural guides for relevant information. Use this when users ask about safety procedures, regulations, best practices, or technical specifications.',
+              parameters: {
+                type: 'object' as any,
+                properties: {
+                  query: {
+                    type: 'string' as any,
+                    description: 'The search query - be specific about what information is needed (e.g., "electrical safety grounding procedures", "OSHA fall protection requirements")'
+                  }
+                },
+                required: ['query']
+              }
+            }]
+          }],
         },
         callbacks: {
           onopen: async () => {
@@ -210,6 +300,65 @@ export const useGeminiLive = () => {
             }, 1000 / FRAME_RATE);
           },
           onmessage: async (message: LiveServerMessage) => {
+            // Handle function calls from Gemini
+            if (message.toolCall) {
+              const toolCall = message.toolCall;
+              console.log('[RAG] Function call received:', toolCall.functionCalls);
+
+              for (const functionCall of toolCall.functionCalls || []) {
+                if (functionCall.name === 'search_documents') {
+                  const query = functionCall.args?.query;
+                  console.log('[RAG] Executing search for:', query);
+
+                  try {
+                    const results = await searchDocuments(query);
+
+                    // Format results for the model
+                    let responseText = '';
+                    if (results.length === 0) {
+                      responseText = 'No relevant documents found.';
+                    } else {
+                      responseText = `Found ${results.length} relevant document sections:\n\n`;
+                      results.forEach((result: SearchResult, index: number) => {
+                        const score = (result.score * 100).toFixed(1);
+                        responseText += `${index + 1}. [Score: ${score}%] ${result.payload?.text || 'No text'}\n`;
+                        if (result.payload?.source) {
+                          responseText += `   Source: ${result.payload.source}\n`;
+                        }
+                        responseText += '\n';
+                      });
+                    }
+
+                    console.log('[RAG] Sending function response with', results.length, 'results');
+
+                    // Send function response back to Gemini
+                    if (sessionRef.current) {
+                      await sessionRef.current.sendToolResponse({
+                        functionResponses: [{
+                          id: functionCall.id,
+                          name: functionCall.name,
+                          response: { result: responseText }
+                        }]
+                      });
+                    }
+                  } catch (error) {
+                    console.error('[RAG] Function execution error:', error);
+
+                    // Send error response
+                    if (sessionRef.current) {
+                      await sessionRef.current.sendToolResponse({
+                        functionResponses: [{
+                          id: functionCall.id,
+                          name: functionCall.name,
+                          response: { error: 'Failed to search documents' }
+                        }]
+                      });
+                    }
+                  }
+                }
+              }
+            }
+
             if (message.serverContent?.inputTranscription) {
               currentInputTranscriptionRef.current += message.serverContent.inputTranscription.text;
             }
@@ -226,7 +375,7 @@ export const useGeminiLive = () => {
               if (newItems.length > 0) {
                 setTranscriptionHistory(prev => [...prev, ...newItems]);
               }
-              
+
               currentInputTranscriptionRef.current = '';
               currentOutputTranscriptionRef.current = '';
             }
@@ -299,11 +448,42 @@ export const useGeminiLive = () => {
     });
   }, [cleanup]);
   
+  const sendTextMessage = useCallback(async (text: string) => {
+    if (!sessionRef.current || sessionState !== 'active') {
+      console.warn('[Text] Cannot send message - session not active');
+      return;
+    }
+
+    try {
+      console.log('[Text] Sending message:', text);
+
+      // Add user message to transcription history immediately
+      setTranscriptionHistory(prev => [...prev, { author: 'user', text }]);
+
+      // Send text to Gemini Live session
+      await sessionRef.current.sendRealtimeInput({
+        text: text
+      });
+
+      console.log('[Text] Message sent successfully');
+    } catch (error) {
+      console.error('[Text] Failed to send message:', error);
+      setErrorMessage('Failed to send message');
+    }
+  }, [sessionState]);
+
   useEffect(() => {
     return () => {
         cleanup();
     };
   }, [cleanup]);
 
-  return { sessionState, transcriptionHistory, startSession, endSession, errorMessage };
+  return {
+    sessionState,
+    transcriptionHistory,
+    startSession,
+    endSession,
+    sendTextMessage,
+    errorMessage
+  };
 };

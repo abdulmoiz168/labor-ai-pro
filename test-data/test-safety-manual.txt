@@ -1,0 +1,67 @@
+ELECTRICAL SAFETY MANUAL FOR CONSTRUCTION WORKERS
+
+Chapter 1: Personal Protective Equipment (PPE)
+
+All electricians must wear proper PPE when working with electrical systems. This includes:
+- Insulated gloves rated for the voltage being worked on
+- Safety glasses with side shields
+- Hard hat with electrical rating
+- Non-conductive footwear with electrical hazard rating
+- Flame-resistant clothing when working on energized equipment
+
+Chapter 2: Lockout/Tagout Procedures
+
+Before working on any electrical equipment:
+1. Notify all affected employees
+2. Shut down the equipment using normal stopping procedures
+3. Isolate the energy source by opening disconnects or removing fuses
+4. Apply lockout/tagout devices - each worker must apply their own lock
+5. Release or block any stored energy (capacitors, springs, elevated parts)
+6. Verify isolation by testing with a voltage tester
+
+Chapter 3: Grounding Requirements
+
+Proper grounding is essential for electrical safety:
+- All metal enclosures must be grounded
+- Ground fault circuit interrupters (GFCI) required for temporary power
+- Grounding electrode system must be installed per NEC requirements
+- Equipment grounding conductor must be sized per NEC Table 250.122
+- Test grounding resistance annually - must be less than 25 ohms
+
+Chapter 4: Working at Heights
+
+When working on overhead electrical systems:
+- Use properly rated ladders - fiberglass for electrical work
+- Maintain 10-foot clearance from power lines (50kV or less)
+- Use fall protection equipment rated for electrical work
+- Inspect all equipment before each use
+- Never work alone when at heights above 6 feet
+
+Chapter 5: Arc Flash Protection
+
+Arc flash hazards require special precautions:
+- Perform arc flash hazard analysis before work
+- Wear proper arc-rated clothing based on incident energy level
+- Use insulated tools rated for the voltage
+- Establish flash protection boundary per NFPA 70E
+- Only qualified workers may perform work within flash boundary
+
+Chapter 6: Emergency Procedures
+
+In case of electrical emergency:
+- Call 911 immediately for medical emergencies
+- Do not touch victim until power is confirmed off
+- Use non-conductive materials to move victim if necessary
+- Perform CPR if qualified and victim has no pulse
+- Report all incidents to supervisor immediately
+- Preserve accident scene for investigation
+
+Chapter 7: Tool Safety
+
+Electrical tools must be properly maintained:
+- Inspect tools daily before use
+- Use only double-insulated or grounded tools
+- Keep tools dry and clean
+- Replace damaged cords immediately
+- Use GFCI protection on all portable tools
+- Store tools properly to prevent damage
