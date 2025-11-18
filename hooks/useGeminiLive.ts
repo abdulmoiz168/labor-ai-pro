@@ -280,18 +280,29 @@ export const useGeminiLive = () => {
               ctx.drawImage(videoEl, 0, 0, videoEl.videoWidth, videoEl.videoHeight);
               canvasEl.toBlob(
                 (blob) => {
-                  if (blob) {
-                    blobToBase64(blob).then(base64Data => {
-                      if (sessionRef.current) {
-                        sessionRef.current.sendRealtimeInput({
-                          media: { data: base64Data, mimeType: 'image/jpeg' }
-                        }).catch(err => {
-                          console.error('Failed to send video frame:', err);
-                        });
-                      }
-                    }).catch(err => {
-                      console.error('Failed to encode video frame:', err);
-                    });
+                  if (blob && sessionRef.current) {
+                    blobToBase64(blob)
+                      .then(base64Data => {
+                        // Double-check session is still active before sending
+                        if (sessionRef.current) {
+                          const sendPromise = sessionRef.current.sendRealtimeInput({
+                            media: { data: base64Data, mimeType: 'image/jpeg' }
+                          });
+
+                          // Only add catch handler if we get a promise back
+                          if (sendPromise && typeof sendPromise.catch === 'function') {
+                            sendPromise.catch(err => {
+                              // Silently ignore errors when session is closing
+                              if (sessionState !== 'inactive') {
+                                console.error('Failed to send video frame:', err);
+                              }
+                            });
+                          }
+                        }
+                      })
+                      .catch(err => {
+                        console.error('Failed to encode video frame:', err);
+                      });
                   }
                 },
                 'image/jpeg',
